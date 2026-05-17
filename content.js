@@ -9,6 +9,22 @@ console.log(
 
 window.isRecording = false;
 
+// LOAD RECORDING STATE
+chrome.storage.local.get(
+    ["isRecording"],
+    (result) => {
+
+        if (result.isRecording) {
+
+            window.isRecording = true;
+
+            console.log(
+                "🎥 Recording Restored"
+            );
+        }
+    }
+);
+
 
 // ========================================
 // START / STOP RECORDING
