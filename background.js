@@ -35,12 +35,45 @@ chrome.runtime.onMessage.addListener(
             });
 
             // ENABLE RECORDING
-            chrome.tabs.sendMessage(
-                recordingTabId,
-                {
-                    action: "ENABLE_RECORDING"
-                }
-            );
+
+            try {
+
+
+
+                // SEND MESSAGE
+                chrome.tabs.sendMessage(
+
+                    recordingTabId,
+
+                    {
+                        action: "ENABLE_RECORDING"
+                    },
+
+                    (response) => {
+
+                        if (chrome.runtime.lastError) {
+
+                            console.log(
+                                "Message Error:",
+                                chrome.runtime.lastError.message
+                            );
+
+                            return;
+                        }
+
+                        console.log(
+                            "✅ Recording Enabled"
+                        );
+                    }
+                );
+
+            } catch (err) {
+
+                console.log(
+                    "Injection Error:",
+                    err
+                );
+            }
 
             // SAVE OPEN_URL STEP
             fetch("http://localhost:8080/record-step", {
@@ -108,29 +141,46 @@ chrome.tabs.onUpdated.addListener(
 
     async (tabId, changeInfo, tab) => {
 
-        // PAGE FULLY LOADED
         if (changeInfo.status === "complete") {
 
-            // CHECK RECORDING STATE
             const result =
                 await chrome.storage.local.get(
                     "isRecording"
                 );
 
-            // IF RECORDING ACTIVE
             if (result.isRecording) {
 
                 console.log(
                     "🔄 Re-enabling recording on new page"
                 );
 
-                // WAIT FOR CONTENT SCRIPT
                 setTimeout(() => {
 
                     chrome.tabs.sendMessage(
+
                         tabId,
+
                         {
                             action: "ENABLE_RECORDING"
+                        },
+
+                        (response) => {
+
+                            if (
+                                chrome.runtime.lastError
+                            ) {
+
+                                console.log(
+                                    "Message Error:",
+                                    chrome.runtime.lastError.message
+                                );
+
+                                return;
+                            }
+
+                            console.log(
+                                "✅ Recording enabled again"
+                            );
                         }
                     );
 
