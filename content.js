@@ -1,138 +1,114 @@
-if (window.recorderInitialized) {
-    console.log("Recorder already initialized");
-} else {
+if (!window.playwrightRecorderInjected) {
 
-    window.recorderInitialized = true;
+    window.playwrightRecorderInjected = true;
 
-    console.log("Recorder initialized");
+    let isRecording = false;
 
-    console.log(
-        "Recorder Extension Loaded"
-    );
+    let listenersAttached = false;
 
+    let lastStep = "";
 
-    // ========================================
-    // GLOBAL RECORDING FLAG
-    // ========================================
-
-    window.isRecording = false;
-
-    // LOAD RECORDING STATE
-    chrome.storage.local.get(
-        ["isRecording"],
-        (result) => {
-
-            if (result.isRecording) {
-
-                window.isRecording = true;
-
-                console.log(
-                    "🎥 Recording Restored"
-                );
-            }
-        }
-    );
+    let previousValues = {};
 
 
-    // ========================================
-    // START / STOP RECORDING
-    // ========================================
+
+    // =======================================
+    // MESSAGE LISTENER
+    // =======================================
 
     chrome.runtime.onMessage.addListener(
 
-        (message, sender, sendResponse) => {
+        (message) => {
 
-            // START RECORDING
-            if (message.action === "ENABLE_RECORDING") {
+            if (
+                message.action ===
+                "ENABLE_RECORDING"
+            ) {
 
-                window.isRecording = true;
+                if (isRecording)
+                    return;
 
-                console.log(
-                    "🎥 Recording Started"
-                );
-
-                sendResponse({
-                    success: true
-                });
-
-                return true;
-            }
-
-            // STOP RECORDING
-            if (message.action === "DISABLE_RECORDING") {
-
-                window.isRecording = false;
+                isRecording = true;
 
                 console.log(
-                    "🛑 Recording Stopped"
+                    "✅ Recording Enabled"
                 );
 
-                sendResponse({
-                    success: true
-                });
-
-                return true;
+                attachListeners();
             }
 
-            sendResponse({
-                success: true
-            });
 
-            return true;
+            if (
+                message.action ===
+                "DISABLE_RECORDING"
+            ) {
+
+                isRecording = false;
+
+                console.log(
+                    "🛑 Recording Disabled"
+                );
+
+                removeListeners();
+            }
         }
     );
 
 
-    // ========================================
-    // HIGHLIGHT ELEMENT
-    // ========================================
 
-    function highlightElement(element) {
+    // =======================================
+    // IGNORE RECORDER PANEL
+    // =======================================
 
-        element.style.outline =
-            "3px solid red";
+    function isRecorderElement(element) {
 
-        setTimeout(() => {
-
-            element.style.outline = "";
-
-        }, 1000);
-    }
-
-    // ========================================
-    // Automatic locator type detection
-    // ========================================
-
-    function detectLocatorType(locator) {
-
-        if (
-            locator.startsWith("getBy")
-        ) {
-
-            return "playwright";
-        }
-
-        if (
-            locator.startsWith("//") ||
-            locator.startsWith("(//")
-        ) {
-
-            return "xpath";
-        }
-
-        return "css";
+        return element.closest(
+            "#playwright-recorder-panel"
+        );
     }
 
 
-    // ========================================
-    // CHECK UNIQUE LOCATOR
-    // ========================================
 
-    function isUnique(locator) {
+    // =======================================
+    // SAVE STEP
+    // =======================================
+
+    function saveStep(step) {
+
+        const currentStep =
+
+            JSON.stringify(step);
+
+        if (
+            currentStep === lastStep
+        ) {
+
+            return;
+        }
+
+        lastStep = currentStep;
+
+        chrome.runtime.sendMessage({
+
+            action: "SAVE_STEP",
+
+            step: step
+        });
+    }
+
+
+
+    // =======================================
+    // UNIQUE SELECTOR CHECK
+    // =======================================
+
+    function isUniqueSelector(selector) {
 
         try {
 
-            return document.querySelectorAll(locator).length === 1;
+            return document
+                .querySelectorAll(selector)
+                .length === 1;
 
         } catch {
 
@@ -141,522 +117,518 @@ if (window.recorderInitialized) {
     }
 
 
-    // ========================================
-    // GENERATE STABLE LOCATOR
-    // ========================================
 
-    function generateLocator(element) {
+    // =======================================
+    // GENERATE CSS SELECTOR
+    // =======================================
 
-        // ====================================
-        // ID
-        // ====================================
+    function generateCssSelector(element) {
+
+        if (element.id) {
+
+            return `#${element.id}`;
+        }
+
+        let path = [];
+
+        while (
+            element &&
+            element.nodeType === 1
+        ) {
+
+            let selector =
+
+                element.nodeName
+                    .toLowerCase();
+
+            if (element.className) {
+
+                const classes =
+
+                    element.className
+                        .trim()
+                        .split(/\s+/)
+                        .filter(Boolean);
+
+                if (classes.length) {
+
+                    selector +=
+                        "." +
+                        classes.join(".");
+                }
+            }
+
+            path.unshift(selector);
+
+            const fullPath =
+                path.join(" > ");
+
+            if (
+                isUniqueSelector(fullPath)
+            ) {
+
+                return fullPath;
+            }
+
+            element =
+                element.parentElement;
+        }
+
+        return path.join(" > ");
+    }
+
+
+
+    // =======================================
+    // GENERATE XPATH
+    // =======================================
+
+    function generateXPath(element) {
+
+        if (element.id) {
+
+            return `//*[@id="${element.id}"]`;
+        }
+
+        return `//${element.tagName.toLowerCase()}`;
+    }
+
+
+
+    // =======================================
+    // GET ALL LOCATORS
+    // =======================================
+
+    function getLocators(element) {
+
+        return {
+
+            id:
+                element.id
+                    ? `#${element.id}`
+                    : "",
+
+            name:
+                element.name
+                    ? `[name="${element.name}"]`
+                    : "",
+
+            placeholder:
+                element.placeholder
+                    ? `[placeholder="${element.placeholder}"]`
+                    : "",
+
+            dataTestId:
+                element.getAttribute(
+                    "data-testid"
+                )
+                    ? `[data-testid="${element.getAttribute("data-testid")}"]`
+                    : "",
+
+            css:
+                generateCssSelector(element),
+
+            xpath:
+                generateXPath(element)
+        };
+    }
+
+
+
+    // =======================================
+    // GET BEST LOCATOR
+    // =======================================
+
+    function getBestLocator(element) {
 
         if (
-
             element.id &&
-            element.id.trim() !== ""
-
+            isUniqueSelector(
+                `#${element.id}`
+            )
         ) {
 
-            const locator = `#${element.id}`;
+            return {
 
-            if (isUnique(locator)) {
-                return locator;
-            }
+                type: "id",
+
+                value:
+                    `#${element.id}`
+            };
         }
 
-
-        // ====================================
-        // DATA TESTID
-        // ====================================
-
-        const testId =
-            element.getAttribute("data-testid");
-
-        if (testId) {
-
-            const locator =
-                `[data-testid="${testId}"]`;
-
-            if (isUnique(locator)) {
-                return locator;
-            }
-        }
-
-
-        // ====================================
-        // NAME
-        // ====================================
-
-        const name =
-            element.getAttribute("name");
-
-        if (name) {
-
-            const locator =
-                `[name="${name}"]`;
-
-            if (isUnique(locator)) {
-                return locator;
-            }
-        }
-
-
-        // ====================================
-        // PLACEHOLDER
-        // ====================================
-
-        const placeholder =
-            element.getAttribute("placeholder");
-
-        if (placeholder) {
-
-            return `getByPlaceholder('${placeholder}')`;
-        }
-
-
-        // ====================================
-        // ARIA LABEL
-        // ====================================
-
-        const aria =
-            element.getAttribute("aria-label");
-
-        if (aria) {
-
-            return `getByLabel('${aria}')`;
-        }
-
-
-        // ====================================
-        // BUTTON
-        // ====================================
 
         if (
-
-            element.tagName === "BUTTON" &&
-            element.innerText.trim()
-
+            element.name &&
+            isUniqueSelector(
+                `[name="${element.name}"]`
+            )
         ) {
 
-            return `getByRole('button', { name: '${element.innerText.trim()}' })`;
+            return {
+
+                type: "name",
+
+                value:
+                    `[name="${element.name}"]`
+            };
         }
 
-
-        // ====================================
-        // LINK
-        // ====================================
 
         if (
-
-            element.tagName === "A" &&
-            element.innerText.trim()
-
+            element.placeholder &&
+            isUniqueSelector(
+                `[placeholder="${element.placeholder}"]`
+            )
         ) {
 
-            return `getByRole('link', { name: '${element.innerText.trim()}' })`;
+            return {
+
+                type: "placeholder",
+
+                value:
+                    `[placeholder="${element.placeholder}"]`
+            };
         }
 
 
-        // ====================================
-        // INPUT TYPES
-        // ====================================
+        const dataTestId =
 
-        if (element.tagName === "INPUT") {
-
-            // EMAIL
-
-            if (element.type === "email") {
-
-                const locator =
-                    `input[type="email"]`;
-
-                if (isUnique(locator)) {
-                    return locator;
-                }
-            }
-
-            // PASSWORD
-
-            if (element.type === "password") {
-
-                const locator =
-                    `input[type="password"]`;
-
-                if (isUnique(locator)) {
-                    return locator;
-                }
-            }
-
-            // SEARCH
-
-            if (element.type === "search") {
-
-                const locator =
-                    `input[type="search"]`;
-
-                if (isUnique(locator)) {
-                    return locator;
-                }
-            }
-        }
-
-
-        // ====================================
-        // STABLE CLASS
-        // ====================================
-
-        if (
-
-            element.className &&
-            typeof element.className === "string"
-
-        ) {
-
-            const classList =
-
-                element.className
-                    .trim()
-                    .split(" ")
-                    .filter(c => {
-
-                        return (
-
-                            c.length > 2 &&
-
-                            // DYNAMIC FRAMEWORK CLASSES
-                            !c.includes("css-") &&
-                            !c.includes("Mui") &&
-                            !c.includes("chakra") &&
-
-                            // DYNAMIC STATE CLASSES
-                            !c.includes("focus") &&
-                            !c.includes("active") &&
-                            !c.includes("selected") &&
-                            !c.includes("disabled") &&
-                            !c.includes("hover") &&
-                            !c.includes("error") &&
-                            !c.includes("opened") &&
-                            !c.includes("hidden") &&
-                            !c.includes("visible") &&
-
-                            // AVOID GENERATED CLASSES
-                            !/\d/.test(c)
-
-                        );
-                    });
-
-            for (const cls of classList) {
-
-                const locator = `.${cls}`;
-
-                if (isUnique(locator)) {
-                    return locator;
-                }
-            }
-        }
-
-
-        // ====================================
-        // FALLBACK TEXT
-        // ====================================
-
-        if (
-
-            element.innerText &&
-            element.innerText.trim().length > 0
-
-        ) {
-
-            return `getByText('${element.innerText.trim()}')`;
-        }
-
-
-        // ====================================
-        // TEXTBOX FALLBACK
-        // ====================================
-
-        if (element.tagName === "INPUT") {
-
-            const allInputs =
-
-                Array.from(
-                    document.querySelectorAll("input")
-                );
-
-            const index =
-                allInputs.indexOf(element);
-
-            if (index >= 0) {
-
-                return `getByRole('textbox').nth(${index})`;
-            }
-        }
-
-        return element.tagName.toLowerCase();
-    }
-
-    // ========================================
-    // SEND STEP TO BACKEND
-    // ========================================
-
-    async function sendStep(step) {
-
-        try {
-
-            await fetch(
-
-                "http://localhost:8080/record-step",
-
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify(step)
-                }
+            element.getAttribute(
+                "data-testid"
             );
 
-        } catch (err) {
+        if (
+            dataTestId &&
+            isUniqueSelector(
+                `[data-testid="${dataTestId}"]`
+            )
+        ) {
 
-            console.error(
-                "Failed to send step:",
-                err
-            );
+            return {
+
+                type: "data-testid",
+
+                value:
+                    `[data-testid="${dataTestId}"]`
+            };
         }
+
+
+        const css =
+            generateCssSelector(element);
+
+        if (
+            css &&
+            isUniqueSelector(css)
+        ) {
+
+            return {
+
+                type: "css",
+
+                value: css
+            };
+        }
+
+
+        return {
+
+            type: "xpath",
+
+            value:
+                generateXPath(element)
+        };
     }
 
 
-    // ========================================
-    // CLICK LISTENER
-    // ========================================
 
-    document.addEventListener(
+    // =======================================
+    // CLICK
+    // =======================================
 
-        "click",
+    function handleClick(event) {
 
-        async function (e) {
+        if (!isRecording)
+            return;
 
-            // RECORD ONLY IF ENABLED
+        const element =
+            event.target;
 
-            if (!window.isRecording)
-                return;
+        if (
+            !element ||
+            isRecorderElement(element)
+        ) {
 
-            const element = e.target;
+            return;
+        }
 
-            highlightElement(element);
 
-            const locatorValue =
-                generateLocator(element);
+        // IGNORE INPUT CLICK
 
-            const locatorType =
-                detectLocatorType(locatorValue);
+        if (
 
+            element.tagName ===
+            "INPUT"
 
-            const step = {
+            ||
 
-                action: "CLICK",
+            element.tagName ===
+            "TEXTAREA"
 
-                locator: locatorValue,
+            ||
 
-                locatorType: locatorType,
+            element.tagName ===
+            "SELECT"
+        ) {
 
-                locatorValue: locatorValue,
+            return;
+        }
 
-                data: "",
 
-                description:
-                    `Click on ${element.tagName}`
-            };
+        const locators =
+            getLocators(element);
 
-            console.log(
-                "Captured CLICK Step:",
-                step
-            );
+        const bestLocator =
+            getBestLocator(element);
 
-            await sendStep(step);
 
-        },
+        saveStep({
 
-        true
-    );
+            action: "CLICK",
 
+            data: "",
 
-    // ========================================
-    // TYPE LISTENER
-    // ========================================
+            locators: locators,
 
-    const fieldValues = new Map();
+            locatorType:
+                bestLocator.type,
 
+            locatorValue:
+                bestLocator.value,
 
-    // STORE VALUE WHILE TYPING
+            description:
+                `Clicked on <${element.tagName}>`
+        });
+    }
 
-    document.addEventListener(
 
-        "input",
 
-        function (e) {
+    // =======================================
+    // INPUT BLUR
+    // =======================================
 
-            if (!window.isRecording)
-                return;
+    function handleBlur(event) {
 
-            const element = e.target;
+        if (!isRecording)
+            return;
 
-            if (
+        const element =
+            event.target;
 
-                element.tagName !== "INPUT" &&
-                element.tagName !== "TEXTAREA"
+        if (
+            !element ||
+            isRecorderElement(element)
+        ) {
 
-            ) {
+            return;
+        }
 
-                return;
-            }
 
-            fieldValues.set(
+        if (
 
-                element,
+            element.tagName !==
+            "INPUT"
 
-                element.value
-            );
+            &&
 
-        },
+            element.tagName !==
+            "TEXTAREA"
+        ) {
 
-        true
-    );
+            return;
+        }
 
 
-    // RECORD ONLY WHEN USER LEAVES FIELD
+        const value =
+            element.value?.trim();
 
-    document.addEventListener(
+        if (!value)
+            return;
 
-        "blur",
 
-        async function (e) {
+        const bestLocator =
+            getBestLocator(element);
 
-            if (!window.isRecording)
-                return;
+        const key =
+            bestLocator.value;
 
-            const element = e.target;
 
-            if (
+        // PREVENT DUPLICATE INPUTS
 
-                element.tagName !== "INPUT" &&
-                element.tagName !== "TEXTAREA"
+        if (
+            previousValues[key] === value
+        ) {
 
-            ) {
+            return;
+        }
 
-                return;
-            }
+        previousValues[key] =
+            value;
 
-            const finalValue =
-                fieldValues.get(element);
 
-            if (
+        const locators =
+            getLocators(element);
 
-                finalValue === undefined ||
-                finalValue.trim() === ""
 
-            ) {
+        saveStep({
 
-                return;
-            }
+            action: "SET_DATA",
 
-            const locatorValue =
-                generateLocator(element);
+            data: value,
 
+            locators:
+                locators,
 
-            const locatorType =
-                detectLocatorType(locatorValue);
+            locatorType:
+                bestLocator.type,
 
-            const step = {
+            locatorValue:
+                bestLocator.value,
 
-                action: "TYPE",
+            description:
+                `Entered ${value}`
+        });
+    }
 
-                locator: locatorValue,
 
-                locatorType: locatorType,
 
-                locatorValue: locatorValue,
+    // =======================================
+    // SELECT DROPDOWN
+    // =======================================
 
-                data: finalValue,
+    function handleSelect(event) {
 
-                description:
-                    `Type '${finalValue}'`
-            };
+        if (!isRecording)
+            return;
 
-            console.log(
-                "Captured TYPE Step:",
-                step
-            );
+        const element =
+            event.target;
 
-            await sendStep(step);
+        if (
+            !element ||
+            isRecorderElement(element)
+        ) {
 
-            fieldValues.delete(element);
+            return;
+        }
 
-        },
 
-        true
-    );
+        if (
+            element.tagName !==
+            "SELECT"
+        ) {
 
+            return;
+        }
 
-    // ========================================
-    // DROPDOWN LISTENER
-    // ========================================
 
-    document.addEventListener(
+        const locators =
+            getLocators(element);
 
-        "change",
+        const bestLocator =
+            getBestLocator(element);
 
-        async function (e) {
 
-            if (!window.isRecording)
-                return;
+        saveStep({
 
-            const element = e.target;
+            action:
+                "SELECT_DROPDOWN",
 
-            // ONLY SELECT
+            data:
+                element.value,
 
-            if (
-                element.tagName !== "SELECT"
-            ) {
-                return;
-            }
+            locators:
+                locators,
 
-            const locatorValue =
-                generateLocator(element);
+            locatorType:
+                bestLocator.type,
 
-            const locatorType =
-                detectLocatorType(locatorValue);
+            locatorValue:
+                bestLocator.value,
 
-            const step = {
+            description:
+                `Selected ${element.value}`
+        });
+    }
 
-                action: "SELECT",
 
-                locator: locatorValue,
 
-                locatorType: locatorType,
+    // =======================================
+    // ATTACH LISTENERS
+    // =======================================
 
-                locatorValue: locatorValue,
+    function attachListeners() {
 
-                data: element.value,
+        if (listenersAttached)
+            return;
 
-                description:
-                    `Select '${element.value}'`
-            };
+        listenersAttached = true;
 
-            console.log(
-                "Captured SELECT Step:",
-                step
-            );
 
-            await sendStep(step);
+        document.addEventListener(
+            "click",
+            handleClick,
+            true
+        );
 
-        },
 
-        true
-    );
+        document.addEventListener(
+            "blur",
+            handleBlur,
+            true
+        );
 
+
+        document.addEventListener(
+            "change",
+            handleSelect,
+            true
+        );
+    }
+
+
+
+    // =======================================
+    // REMOVE LISTENERS
+    // =======================================
+
+    function removeListeners() {
+
+        if (!listenersAttached)
+            return;
+
+        listenersAttached = false;
+
+
+        document.removeEventListener(
+            "click",
+            handleClick,
+            true
+        );
+
+
+        document.removeEventListener(
+            "blur",
+            handleBlur,
+            true
+        );
+
+
+        document.removeEventListener(
+            "change",
+            handleSelect,
+            true
+        );
+    }
 }

@@ -1,0 +1,207 @@
+#playwright-recorder-panel {
+
+    position: fixed;
+
+    top: 20px;
+
+    right: 20px;
+
+    width: 50vw;
+
+    height: 70vh;
+
+    min-width: 700px;
+
+    min-height: 400px;
+
+    max-width: 95vw;
+
+    max-height: 95vh;
+
+    resize: both;
+
+    overflow: hidden;
+
+    background: white;
+
+    z-index: 999999;
+
+    border-radius: 10px;
+
+    font-family: Arial;
+
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+
+    display: flex;
+
+    flex-direction: column;
+}
+
+
+#recorder-header {
+
+    background: #111827;
+
+    color: white;
+
+    padding: 12px;
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    font-size: 18px;
+
+    font-weight: bold;
+
+    cursor: move;
+
+    flex-shrink: 0;
+}
+
+
+#recorder-body {
+
+    flex: 1;
+
+    display: flex;
+
+    flex-direction: column;
+
+    overflow: hidden;
+
+    padding: 10px;
+}
+
+
+#button-container {
+
+    display: flex;
+
+    gap: 10px;
+
+    margin-bottom: 10px;
+}
+
+
+#start-recording {
+
+    background: green;
+}
+
+
+#stop-recording {
+
+    background: red;
+}
+
+
+#button-container button {
+
+    border: none;
+
+    padding: 10px 14px;
+
+    border-radius: 6px;
+
+    color: white;
+
+    font-weight: bold;
+
+    cursor: pointer;
+}
+
+
+#close-btn,
+#minimize-btn {
+
+    background: transparent;
+
+    color: white;
+
+    border: none;
+
+    cursor: pointer;
+
+    font-size: 20px;
+
+    margin-left: 10px;
+}
+
+
+#table-wrapper {
+
+    flex: 1;
+
+    overflow: auto;
+
+    border: 1px solid #ddd;
+}
+
+
+#steps-table {
+
+    width: 100%;
+
+    border-collapse: collapse;
+
+    font-size: 14px;
+}
+
+
+#steps-table th {
+
+    position: sticky;
+
+    top: 0;
+
+    background: #f3f4f6;
+
+    border: 1px solid #ddd;
+
+    padding: 10px;
+
+    text-align: left;
+}
+
+
+#steps-table td {
+
+    border: 1px solid #ddd;
+
+    padding: 10px;
+
+    word-break: break-word;
+}
+
+
+.locator-dropdown {
+
+    width: 150px;
+
+    padding: 5px;
+}
+
+
+.locator-cell {
+
+    max-width: 300px;
+}
+
+
+.delete-btn {
+
+    background: red;
+
+    color: white;
+
+    border: none;
+
+    padding: 6px 10px;
+
+    border-radius: 5px;
+
+    cursor: pointer;
+}

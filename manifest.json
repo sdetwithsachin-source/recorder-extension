@@ -1,12 +1,14 @@
 {
     "manifest_version": 3,
     "name": "Playwright Recorder",
-    "version": "1.0",
+    "version": "1.0.0",
+    "description": "Standalone Playwright Recorder",
     "permissions": [
         "activeTab",
         "scripting",
         "tabs",
-        "storage"
+        "storage",
+        "downloads"
     ],
     "host_permissions": [
         "<all_urls>"
@@ -14,18 +16,19 @@
     "background": {
         "service_worker": "background.js"
     },
-    "content_scripts": [
+    "action": {
+        "default_title": "Playwright Recorder"
+    },
+    "web_accessible_resources": [
         {
-            "matches": [
-                "<all_urls>"
-            ],
-            "js": [
+            "resources": [
+                "styles.css",
+                "recorder-ui.js",
                 "content.js"
             ],
-            "run_at": "document_idle"
+            "matches": [
+                "<all_urls>"
+            ]
         }
-    ],
-    "action": {
-        "default_popup": "popup.html"
-    }
+    ]
 }
